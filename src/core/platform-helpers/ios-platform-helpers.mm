@@ -39,11 +39,15 @@
 // TODO: Remove me
 #include "private.h"
 
+#define ACTIVE_SHARED_CORE "ACTIVE_SHARED_CORE"
+
 // =============================================================================
 
 using namespace std;
 
 LINPHONE_BEGIN_NAMESPACE
+
+void on_core_must_stop(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
 class IosPlatformHelpers : public GenericPlatformHelpers {
 public:
@@ -81,6 +85,11 @@ public:
 	void onLinphoneCoreStart (bool monitoringEnabled) override;
 	void onLinphoneCoreStop () override;
 
+	// shared core
+	void setupSharedCore(std::string appGroup, bool isMainCore) override;
+	bool canCoreStart() override;
+	void onCoreMustStop();
+
 	//IosHelper specific
 	bool isReachable(SCNetworkReachabilityFlags flags);
 	void networkChangeCallback(void);
@@ -96,12 +105,27 @@ private:
 	static string getResourceDirPath (const string &framework, const string &resource);
 	static string getResourcePath (const string &framework, const string &resource);
 
+	// shared core
+	bool isCoreShared();
+	bool isSharedCoreStarted();
+	void setSharedCoreState(bool active);
+
+	// shared core : executor
+	bool canExecutorCoreStart();
+	void subscribeToMainCoreNotifs();
+
+	// shared core : main
+	bool canMainCoreStart();
+	void stopSharedCores();
+
 	long int mCpuLockTaskId;
 	int mCpuLockCount;
 	SCNetworkReachabilityRef reachabilityRef = NULL;
 	SCNetworkReachabilityFlags mCurrentFlags = 0;
 	bool mNetworkMonitoringEnabled = false;
 	static const string Framework;
+	std::string mAppGroup = "";
+	bool mIsMainCore = false;
 };
 
 static void sNetworkChangeCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
@@ -250,6 +274,9 @@ void IosPlatformHelpers::onLinphoneCoreStart(bool monitoringEnabled) {
 void IosPlatformHelpers::onLinphoneCoreStop() {
 	if (mNetworkMonitoringEnabled) {
 		stopNetworkMonitoring();
+	}
+	if (isCoreShared()) {
+		setSharedCoreState(false);
 	}
 }
 
@@ -577,6 +604,115 @@ string IosPlatformHelpers::getWifiSSID(void) {
 	}
 	return ssid;
 #endif
+}
+
+// -----------------------------------------------------------------------------
+// shared core
+// -----------------------------------------------------------------------------
+
+void IosPlatformHelpers::setupSharedCore(std::string appGroup, bool isMainCore) {
+	ms_message("[DARWIN] setupSharedCore");
+	mAppGroup = appGroup;
+	mIsMainCore = isMainCore;
+}
+
+bool IosPlatformHelpers::isCoreShared() {
+	ms_message("[DARWIN] isCoreShared");
+
+	return !mAppGroup.empty();
+}
+
+bool IosPlatformHelpers::canCoreStart() {
+	ms_message("[DARWIN] canCoreStart");
+	if (!isCoreShared()) return true;
+
+	if (mIsMainCore) {
+		return canMainCoreStart();
+	} else {
+		return canExecutorCoreStart();
+	}
+}
+
+bool IosPlatformHelpers::isSharedCoreStarted() {
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@(mAppGroup.c_str())];
+    bool active = [defaults boolForKey:@ACTIVE_SHARED_CORE];
+	ms_message("[DARWIN] isSharedCoreStarted %d", active); // TODO PAUL : debug a virer
+	return active;
+}
+
+// set to false in onLinphoneCoreStop() (called in linohone_core_stop)
+void IosPlatformHelpers::setSharedCoreState(bool active) {
+	ms_message("[DARWIN] setSharedCoreState %d", active);
+    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:@(mAppGroup.c_str())];
+    [defaults setBool:active forKey:@ACTIVE_SHARED_CORE];
+}
+
+// -----------------------------------------------------------------------------
+// shared core : executor
+// -----------------------------------------------------------------------------
+
+bool IosPlatformHelpers::canExecutorCoreStart() {
+	ms_message("[DARWIN] canExecutorCoreStart");
+	if (isSharedCoreStarted()) return false;
+
+	subscribeToMainCoreNotifs();
+	setSharedCoreState(true);
+	return true;
+}
+
+
+void IosPlatformHelpers::subscribeToMainCoreNotifs() {
+	ms_message("[DARWIN] subscribeToMainCoreNotifs");
+   CFNotificationCenterRef notification = CFNotificationCenterGetDarwinNotifyCenter ();
+   CFNotificationCenterAddObserver(notification, (__bridge const void *)(this), on_core_must_stop, CFSTR(ACTIVE_SHARED_CORE), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
+}
+
+void on_core_must_stop(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+   ms_message("[DARWIN] on_core_must_stop");
+	if (observer) {
+		IosPlatformHelpers *myself = (IosPlatformHelpers *) observer;
+		myself->onCoreMustStop();
+	}
+}
+
+void IosPlatformHelpers::onCoreMustStop() {
+	ms_message("[DARWIN] onCoreMustStop");
+	linphone_core_stop(getCore()->getCCore());
+}
+
+// -----------------------------------------------------------------------------
+// shared core : main
+// -----------------------------------------------------------------------------
+
+bool IosPlatformHelpers::canMainCoreStart() {
+	ms_message("[DARWIN] canMainCoreStart");
+	if (isSharedCoreStarted()) {
+		try {
+			stopSharedCores();
+		} catch (std::exception &e) {
+			ms_error("[DARWIN] %s", e.what());
+			return false;
+		}
+	}
+	setSharedCoreState(true);
+	return true;
+}
+
+void IosPlatformHelpers::stopSharedCores() {
+    ms_message("[DARWIN] stopSharedCores");
+	CFNotificationCenterRef notification = CFNotificationCenterGetDarwinNotifyCenter();
+    CFNotificationCenterPostNotification(notification, CFSTR(ACTIVE_SHARED_CORE), NULL, NULL, YES);
+
+    for(int i=0; isSharedCoreStarted() && i<30; i++) {
+        ms_message("[DARWIN] wait");
+        usleep(100000);
+    }
+	if (isSharedCoreStarted()) {
+		// TODO PAUL : set a false pour pouvoir tester
+		setSharedCoreState(false);
+		// throw "Unable to stop shared Core";
+	}
+    ms_message("[DARWIN] stopped");
 }
 
 // -----------------------------------------------------------------------------
