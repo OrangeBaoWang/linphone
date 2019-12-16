@@ -103,6 +103,10 @@ void Imdn::onImdnMessageDelivered (const std::shared_ptr<ImdnMessage> &message) 
 	sentImdnMessages.remove(message);
 }
 
+bool Imdn::hasUndeliveredImdnMessage() {
+	return !sentImdnMessages.empty();
+}
+
 // -----------------------------------------------------------------------------
 
 void Imdn::onGlobalStateChanged (LinphoneGlobalState state) {
