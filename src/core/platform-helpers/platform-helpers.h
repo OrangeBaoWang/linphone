@@ -78,7 +78,6 @@ public:
 	virtual void onLinphoneCoreStart (bool monitoringEnabled) = 0;
 	virtual void onLinphoneCoreStop () = 0;
 
-	virtual void setupSharedCore(std::string appGroup, bool isMainCore) = 0;
 	virtual bool canCoreStart() = 0;
 
 protected:
@@ -129,7 +128,6 @@ public:
 	void onLinphoneCoreStart (bool monitoringEnabled) override;
 	void onLinphoneCoreStop () override;
 
-	void setupSharedCore(std::string appGroup, bool isMainCore) override;
 	bool canCoreStart() override;
 
 protected:

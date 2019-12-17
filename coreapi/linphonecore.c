@@ -2620,8 +2620,9 @@ LinphoneCore *_linphone_core_new_with_config(LinphoneCoreCbs *cbs, struct _LpCon
 LinphoneCore *_linphone_core_new_shared_with_config(LinphoneCoreCbs *cbs, struct _LpConfig *config, void *userdata, void *system_context, bool_t automatically_start, const char *app_group, bool_t main_core) {
 	LinphoneCore *core = L_INIT(Core);
 	Core::create(core);
-	linphone_core_init(core, cbs, config, userdata, system_context, automatically_start); // -> create platform helper
-	getPlatformHelpers(core)->setupSharedCore(app_group, main_core);
+	linphone_config_set_string(config, "shared_core", "app_group", app_group);
+	linphone_config_set_bool(config, "shared_core", "main_core", main_core);
+	linphone_core_init(core, cbs, config, userdata, system_context, automatically_start);
 	return core;
 }
 

@@ -117,7 +117,7 @@ void CorePrivate::uninit () {
 		ms_usleep(10000);
 	}
 
-	const list<shared_ptr<AbstractChatRoom>> chatRooms = q->getChatRooms();
+	const list<shared_ptr<AbstractChatRoom>> chatRooms = q->getChatRooms(); // TODO PAUL : a tester
 	bool hasUndeliveredImdn = true;
 	for (int i=0; hasUndeliveredImdn && i<50; i++) {
 		hasUndeliveredImdn = false;

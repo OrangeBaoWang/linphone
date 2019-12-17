@@ -171,8 +171,6 @@ string GenericPlatformHelpers::getDownloadPath () {
 	return "";
 }
 
-void GenericPlatformHelpers::setupSharedCore(std::string appGroup, bool isMainCore) {}
-
 bool GenericPlatformHelpers::canCoreStart() {
 	return true;
 }

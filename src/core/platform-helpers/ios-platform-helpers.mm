@@ -86,7 +86,6 @@ public:
 	void onLinphoneCoreStop () override;
 
 	// shared core
-	void setupSharedCore(std::string appGroup, bool isMainCore) override;
 	bool canCoreStart() override;
 	void onCoreMustStop();
 
@@ -106,6 +105,7 @@ private:
 	static string getResourcePath (const string &framework, const string &resource);
 
 	// shared core
+	void setupSharedCore(struct _LpConfig *config);
 	bool isCoreShared();
 	bool isSharedCoreStarted();
 	void setSharedCoreState(bool active);
@@ -144,6 +144,8 @@ IosPlatformHelpers::IosPlatformHelpers (std::shared_ptr<LinphonePrivate::Core> c
 		belr::GrammarLoader::get().addPath(cpimPath);
 	else
 		ms_error("IosPlatformHelpers did not find cpim grammar resource directory...");
+
+	setupSharedCore(core->getCCore()->config);
 
 	string identityPath = getResourceDirPath(Framework, "identity_grammar");
 	if (!identityPath.empty())
@@ -610,10 +612,14 @@ string IosPlatformHelpers::getWifiSSID(void) {
 // shared core
 // -----------------------------------------------------------------------------
 
-void IosPlatformHelpers::setupSharedCore(std::string appGroup, bool isMainCore) {
+void IosPlatformHelpers::setupSharedCore(struct _LpConfig *config) {
 	ms_message("[DARWIN] setupSharedCore");
-	mAppGroup = appGroup;
-	mIsMainCore = isMainCore;
+	string appGroup = linphone_config_get_string(config, "shared_core", "app_group", "");
+	bool isMainCore = linphone_config_get_bool(config, "shared_core", "main_core", false);
+	if (!appGroup.empty()) {
+		mAppGroup = appGroup;
+		mIsMainCore = isMainCore;
+	}
 }
 
 bool IosPlatformHelpers::isCoreShared() {
