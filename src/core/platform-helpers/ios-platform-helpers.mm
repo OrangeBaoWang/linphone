@@ -109,6 +109,8 @@ private:
 	bool isCoreShared();
 	bool isSharedCoreStarted();
 	void setSharedCoreState(bool active);
+	void reloadConfig();
+
 
 	// shared core : executor
 	bool canExecutorCoreStart();
@@ -125,7 +127,6 @@ private:
 	bool mNetworkMonitoringEnabled = false;
 	static const string Framework;
 	std::string mAppGroup = "";
-	bool mIsMainCore = false;
 };
 
 static void sNetworkChangeCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo);
@@ -614,17 +615,11 @@ string IosPlatformHelpers::getWifiSSID(void) {
 
 void IosPlatformHelpers::setupSharedCore(struct _LpConfig *config) {
 	ms_message("[DARWIN] setupSharedCore");
-	string appGroup = linphone_config_get_string(config, "shared_core", "app_group", "");
-	bool isMainCore = linphone_config_get_bool(config, "shared_core", "main_core", false);
-	if (!appGroup.empty()) {
-		mAppGroup = appGroup;
-		mIsMainCore = isMainCore;
-	}
+	mAppGroup = linphone_config_get_string(config, "shared_core", "app_group", "");
 }
 
 bool IosPlatformHelpers::isCoreShared() {
 	ms_message("[DARWIN] isCoreShared");
-
 	return !mAppGroup.empty();
 }
 
@@ -632,7 +627,7 @@ bool IosPlatformHelpers::canCoreStart() {
 	ms_message("[DARWIN] canCoreStart");
 	if (!isCoreShared()) return true;
 
-	if (mIsMainCore) {
+	if (getCore()->getCCore()->is_main_core) {
 		return canMainCoreStart();
 	} else {
 		return canExecutorCoreStart();
@@ -653,6 +648,17 @@ void IosPlatformHelpers::setSharedCoreState(bool active) {
     [defaults setBool:active forKey:@ACTIVE_SHARED_CORE];
 }
 
+// we need to reload the config from file at each start tp get the changes made by the other cores
+void IosPlatformHelpers::reloadConfig() {
+	// if we just created the core, we don't need to reload the config
+	if (getCore()->getCCore()->has_already_started_once) {
+		linphone_config_reload(getCore()->getCCore()->config);
+	} else {
+		getCore()->getCCore()->has_already_started_once = true;
+	}
+
+}
+
 // -----------------------------------------------------------------------------
 // shared core : executor
 // -----------------------------------------------------------------------------
@@ -663,6 +669,7 @@ bool IosPlatformHelpers::canExecutorCoreStart() {
 
 	subscribeToMainCoreNotifs();
 	setSharedCoreState(true);
+	reloadConfig();
 	return true;
 }
 
@@ -701,6 +708,7 @@ bool IosPlatformHelpers::canMainCoreStart() {
 		}
 	}
 	setSharedCoreState(true);
+	reloadConfig();
 	return true;
 }
 
