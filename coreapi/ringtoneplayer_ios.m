@@ -67,13 +67,21 @@ int linphone_ringtoneplayer_ios_start_with_cb(LinphoneRingtonePlayer* rp, const 
 		ms_warning("%s: a player is already instantiated, stopping it first.", __FUNCTION__);
 		linphone_ringtoneplayer_ios_stop(rp);
 	}
-	rp->player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:nil];
-	[rp->player prepareToPlay];
-	rp->player.numberOfLoops = (loop_pause_ms >= 0) ? -1 : 0;
-	rp->player.delegate = rp->playerDelegate;
-	rp->end_of_ringtone = end_of_ringtone;
-	rp->end_of_ringtone_ud = user_data;
-	return [rp->player play] ? 0 : 1;
+	NSError * error = NULL;
+	rp->player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&error];
+	if(rp->player == NULL) {
+		NSLog( @"error in creating AVAudioPlayer - %@ %@", [error domain], [error localizedDescription] );
+	} else {
+		[rp->player prepareToPlay];
+		rp->player.numberOfLoops = (loop_pause_ms >= 0) ? -1 : 0;
+		rp->player.delegate = rp->playerDelegate;
+		rp->end_of_ringtone = end_of_ringtone;
+		rp->end_of_ringtone_ud = user_data;
+		return [rp->player play] ? 0 : 1;
+	}
+
+	return 1;
+
 }
 
 bool_t linphone_ringtoneplayer_ios_is_started(LinphoneRingtonePlayer* rp) {
